@@ -111,6 +111,67 @@ VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow* window)
 #endif // VK_USE_PLATFORM_WIN32_KHR
 }
 
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* formats, uint32_t formatCount) {
+	for (int i = 0; i < formatCount; i++) {
+		if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return formats[i];
+		}
+	}
+
+	return formats[0];
+}
+
+VkSwapchainKHR createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t familyIndex, uint32_t width, uint32_t height) {
+	uint32_t surfaceForamatsCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceForamatsCount, NULL);
+
+	VkSurfaceFormatKHR* formats = new VkSurfaceFormatKHR[surfaceForamatsCount];
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceForamatsCount, formats);
+
+	VkSurfaceCapabilitiesKHR surfCaps;
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfCaps);
+
+	VkBool32 supported;
+	vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, familyIndex, surface, &supported);
+
+	auto format = chooseSwapSurfaceFormat(formats, surfaceForamatsCount);
+
+
+
+	VkSwapchainCreateInfoKHR swapchainCreateInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+	swapchainCreateInfo.surface = surface;
+	swapchainCreateInfo.minImageCount = surfCaps.minImageCount + 1;
+
+	swapchainCreateInfo.imageFormat = format.format;
+	swapchainCreateInfo.imageColorSpace = format.colorSpace;
+	swapchainCreateInfo.imageExtent.width = width;
+	swapchainCreateInfo.imageExtent.height = height;
+	swapchainCreateInfo.imageArrayLayers = 1;
+	swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	swapchainCreateInfo.queueFamilyIndexCount = 1;
+	swapchainCreateInfo.pQueueFamilyIndices = &familyIndex;
+	swapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	swapchainCreateInfo.clipped = VK_TRUE;
+
+	VkSwapchainKHR swapchain = 0;
+	VK_CHECK(vkCreateSwapchainKHR(device, &swapchainCreateInfo, NULL, &swapchain));
+
+	return swapchain;
+}
+
+VkSemaphore createSemaphore(VkDevice device) {
+	VkSemaphoreCreateInfo createInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+
+	VkSemaphore semaphore;
+	VK_CHECK(vkCreateSemaphore(device, &createInfo, NULL, &semaphore));
+
+	return semaphore;
+}
+
 int main() {
 
 	int rc = glfwInit();
@@ -142,51 +203,42 @@ int main() {
 	uint32_t familyIndex = 0;
 	VkDevice device = createDevice(queueProperties, physicalDevice, &familyIndex);
 
-	GLFWwindow* window = glfwCreateWindow(1024, 764, "renderer", NULL, NULL);
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	GLFWwindow* window = glfwCreateWindow(1024, 768, "renderer", NULL, NULL);
 	assert(window);
 
 	VkSurfaceKHR surface = createSurface(instance, window);
 	assert(surface);
 
-	uint32_t surfaceForamatsCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceForamatsCount, NULL);
-
-	VkSurfaceFormatKHR* formats = new VkSurfaceFormatKHR[surfaceForamatsCount];
-	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceForamatsCount, formats);
-
-	VkSurfaceCapabilitiesKHR surfCaps;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfCaps);
-
-	VkBool32 supported;
-	vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, familyIndex, surface, &supported);
-
 	int windowWidth = 0, windowHeight = 0;
 	glfwGetWindowSize(window, &windowWidth, &windowHeight);
-	VkSwapchainCreateInfoKHR swapchainCreateInfo = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
-	swapchainCreateInfo.surface = surface;
-	swapchainCreateInfo.minImageCount = surfCaps.minImageCount;
-	swapchainCreateInfo.imageFormat = formats[0].format;
-	swapchainCreateInfo.imageColorSpace = formats[0].colorSpace;
-	swapchainCreateInfo.imageExtent.width = windowWidth;
-	swapchainCreateInfo.imageExtent.height = windowHeight;
-	swapchainCreateInfo.imageArrayLayers = 1;
-	//swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-	swapchainCreateInfo.queueFamilyIndexCount = 1;
-	swapchainCreateInfo.pQueueFamilyIndices = &familyIndex;
-	swapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-	swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-	//vkCreateDebugReportCallbackEXT(instance)
-	VkSwapchainKHR swapchain = 0;
-	VkResult res = vkCreateSwapchainKHR(device, &swapchainCreateInfo, NULL, &swapchain);
+	auto swapchain = createSwapchain(device, physicalDevice, surface, familyIndex, windowWidth, windowHeight);
+
+	VkSemaphore semaphore = createSemaphore(device);
+
+	VkQueue queue = 0;
+	vkGetDeviceQueue(device, familyIndex, 0, &queue);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+
+		uint32_t imageIndex = 0;
+		vkAcquireNextImageKHR(device, swapchain, ~0ull, semaphore, VK_NULL_HANDLE, &imageIndex);
+
+		VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = &swapchain;
+		presentInfo.pImageIndices = &imageIndex;
+
+		vkQueuePresentKHR(queue, &presentInfo);
+
+		VK_CHECK(vkDeviceWaitIdle(device));
 	}
 
 	glfwDestroyWindow(window);
+
+	vkDestroySwapchainKHR(device, swapchain, NULL);
 
 	vkDestroySurfaceKHR(instance, surface, NULL);
 
