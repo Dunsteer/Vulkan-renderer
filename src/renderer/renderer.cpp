@@ -71,12 +71,25 @@ VkPhysicalDevice pickPhysicalDevice(VkPhysicalDevice* physicalDevices, uint32_t 
 	return 0;
 }
 
-VkDevice createDevice(float queueProperties[], const VkPhysicalDevice& physicalDevice, uint32_t* familyIndex)
+uint32_t getGraphicsQueueFamily(VkPhysicalDevice physicalDevice)
 {
-	*familyIndex = 0;
+	VkQueueFamilyProperties queues[64];
+	uint32_t queueCount = sizeof(queues) / sizeof(queues[0]);
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueCount, queues);
 
+	for (int i = 0; i < queueCount; i++) 
+	{
+		if (queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			return i;
+	}
+
+	return -1;
+}
+
+VkDevice createDevice(float queueProperties[], const VkPhysicalDevice& physicalDevice, uint32_t familyIndex)
+{
 	VkDeviceQueueCreateInfo queueInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-	queueInfo.queueFamilyIndex = *familyIndex;
+	queueInfo.queueFamilyIndex = familyIndex;
 	queueInfo.queueCount = 1;
 	queueInfo.pQueuePriorities = queueProperties;
 
@@ -201,7 +214,7 @@ VkRenderPass createRenderPass(VkDevice device, VkFormat format)
 	attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	VkAttachmentReference colorAttachments = { 0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+	VkAttachmentReference colorAttachments = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
 	VkSubpassDescription subpass = {};
 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -293,12 +306,11 @@ VkPipeline createGraphicsPipeline(VkDevice device, VkPipelineCache pipelineCache
 
 	VkGraphicsPipelineCreateInfo createInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 
-	VkPipelineShaderStageCreateInfo stages[2];
+	VkPipelineShaderStageCreateInfo stages[2] = {};
 	stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
 	stages[0].module = vs;
 	stages[0].pName = "main";
-
 	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
 	stages[1].module = fs;
@@ -320,20 +332,25 @@ VkPipeline createGraphicsPipeline(VkDevice device, VkPipelineCache pipelineCache
 	createInfo.pViewportState = &viewportState;
 
 	VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-	rasterizationState.lineWidth = 0;
+	rasterizationState.lineWidth = 1.f;
 	createInfo.pRasterizationState = &rasterizationState;
 
 	VkPipelineMultisampleStateCreateInfo multisampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 	multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	createInfo.pMultisampleState = &multisampleState;
 
-	VkPipelineDepthStencilStateCreateInfo deptStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-	createInfo.pDepthStencilState = &deptStencilState;
+	VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+	createInfo.pDepthStencilState = &depthStencilState;
 
-	VkPipelineColorBlendStateCreateInfo colorBlandState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-	createInfo.pColorBlendState = &colorBlandState;
+	VkPipelineColorBlendAttachmentState colorAttachmentState = {};
+	colorAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
-	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR };
+	VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+	colorBlendState.attachmentCount = 1;
+	colorBlendState.pAttachments = &colorAttachmentState;
+	createInfo.pColorBlendState = &colorBlendState;
+
+	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
 	VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
 	dynamicState.dynamicStateCount = sizeof(dynamicStates) / sizeof(dynamicStates[0]);
@@ -377,8 +394,8 @@ int main() {
 
 	delete[] properties;
 
-	uint32_t familyIndex = 0;
-	VkDevice device = createDevice(queueProperties, physicalDevice, &familyIndex);
+	uint32_t familyIndex = getGraphicsQueueFamily(physicalDevice);
+	VkDevice device = createDevice(queueProperties, physicalDevice, familyIndex);
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	GLFWwindow* window = glfwCreateWindow(1024, 768, "renderer", NULL, NULL);
@@ -456,7 +473,7 @@ int main() {
 
 		VK_CHECK(vkResetCommandPool(device, commandPool, 0));
 
-		VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };////
+		VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 		VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
@@ -474,12 +491,13 @@ int main() {
 
 		vkCmdBeginRenderPass(commandBuffer, &passBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-		VkViewport viewport = { 0,0,float(windowWidth),float(windowHeight),0,1 };
+		VkViewport viewport = { 0, float(windowHeight), float(windowWidth), -float(windowHeight), 0, 1 };
 		VkRect2D scissor =  { {0, 0}, {uint32_t(windowWidth), uint32_t(windowHeight)} };
 
 		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
 		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffer);
