@@ -46,29 +46,29 @@ VkInstance createInstance()
 
 VkPhysicalDevice pickPhysicalDevice(VkPhysicalDevice* physicalDevices, uint32_t physicalDeviceCount)
 {
-	for (uint32_t i = 0; i < physicalDeviceCount; i++)
+	for (uint32_t i = 0; i < physicalDeviceCount; ++i)
 	{
-		VkPhysicalDeviceProperties properties = {};
-		vkGetPhysicalDeviceProperties(physicalDevices[i], &properties);
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(physicalDevices[i], &props);
 
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 		{
-			printf("Picking discrete GPU %s\n", properties.deviceName);
+			printf("Picking discrete GPU: %s\n", props.deviceName);
 			return physicalDevices[i];
 		}
 	}
 
 	if (physicalDeviceCount > 0)
 	{
-		VkPhysicalDeviceProperties properties = {};
-		vkGetPhysicalDeviceProperties(physicalDevices[0], &properties);
+		VkPhysicalDeviceProperties props;
+		vkGetPhysicalDeviceProperties(physicalDevices[0], &props);
 
-		printf("Picking fallback GPU %s\n", properties.deviceName);
+		printf("Picking fallback GPU: %s\n", props.deviceName);
 		return physicalDevices[0];
 	}
 
-	printf("No GPU found\n");
-	return VK_NULL_HANDLE;
+	printf("No physical devices available!");
+	return 0;
 }
 
 VkDevice createDevice(float queueProperties[], const VkPhysicalDevice& physicalDevice, uint32_t* familyIndex)
@@ -87,7 +87,8 @@ VkDevice createDevice(float queueProperties[], const VkPhysicalDevice& physicalD
 	VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 	deviceInfo.queueCreateInfoCount = 1;
 	deviceInfo.pQueueCreateInfos = &queueInfo;
-	deviceInfo.enabledExtensionCount = 1;
+
+	deviceInfo.enabledExtensionCount = sizeof(extensions) / sizeof(extensions[0]);;
 	deviceInfo.ppEnabledExtensionNames = extensions;
 
 	VkDevice device = 0;
@@ -103,9 +104,9 @@ VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow* window)
 	createInfo.hinstance = GetModuleHandle(0);
 	createInfo.hwnd = glfwGetWin32Window(window);
 
-	VkSurfaceKHR surface = {};
+	VkSurfaceKHR surface = 0;
 
-	vkCreateWin32SurfaceKHR(instance, &createInfo, NULL, &surface);
+	vkCreateWin32SurfaceKHR(instance, &createInfo, VK_NULL_HANDLE, &surface);
 
 	return surface;
 #endif // VK_USE_PLATFORM_WIN32_KHR
@@ -138,27 +139,27 @@ VkSwapchainKHR createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice,
 
 
 
-	VkSwapchainCreateInfoKHR swapchainCreateInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
-	swapchainCreateInfo.surface = surface;
-	swapchainCreateInfo.minImageCount = surfCaps.minImageCount + 1;
+	VkSwapchainCreateInfoKHR createInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+	createInfo.surface = surface;
+	createInfo.minImageCount = surfCaps.minImageCount + 1;
 
-	swapchainCreateInfo.imageFormat = format.format;
-	swapchainCreateInfo.imageColorSpace = format.colorSpace;
-	swapchainCreateInfo.imageExtent.width = width;
-	swapchainCreateInfo.imageExtent.height = height;
-	swapchainCreateInfo.imageArrayLayers = 1;
-	swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	createInfo.imageFormat = format.format;
+	createInfo.imageColorSpace = format.colorSpace;
+	createInfo.imageExtent.width = width;
+	createInfo.imageExtent.height = height;
+	createInfo.imageArrayLayers = 1;
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	swapchainCreateInfo.queueFamilyIndexCount = 1;
-	swapchainCreateInfo.pQueueFamilyIndices = &familyIndex;
-	swapchainCreateInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-	swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-	swapchainCreateInfo.clipped = VK_TRUE;
+	createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	createInfo.queueFamilyIndexCount = 1;
+	createInfo.pQueueFamilyIndices = &familyIndex;
+	createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+	createInfo.clipped = VK_TRUE;
 
 	VkSwapchainKHR swapchain = 0;
-	VK_CHECK(vkCreateSwapchainKHR(device, &swapchainCreateInfo, NULL, &swapchain));
+	VK_CHECK(vkCreateSwapchainKHR(device, &createInfo, NULL, &swapchain));
 
 	return swapchain;
 }
@@ -173,11 +174,12 @@ VkSemaphore createSemaphore(VkDevice device) {
 }
 
 VkCommandPool createCommandPool(VkDevice device, uint32_t familyIndex) {
-	VkCommandPoolCreateInfo commandPoolCreateInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-	commandPoolCreateInfo.queueFamilyIndex = familyIndex;
+	VkCommandPoolCreateInfo createInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+	createInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+	createInfo.queueFamilyIndex = familyIndex;
 
 	VkCommandPool commandPool = 0;
-	VK_CHECK(vkCreateCommandPool(device, &commandPoolCreateInfo, NULL, &commandPool));
+	VK_CHECK(vkCreateCommandPool(device, &createInfo, NULL, &commandPool));
 
 	return commandPool;
 }
@@ -191,7 +193,7 @@ int main() {
 	assert(instance);
 
 	VkPhysicalDevice physicalDevices[16];
-	uint32_t physicalDeviceCount = 16;
+	uint32_t physicalDeviceCount = sizeof(physicalDevices) / sizeof(physicalDevices[0]);
 	VK_CHECK(vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices));
 
 	VkPhysicalDevice physicalDevice = pickPhysicalDevice(physicalDevices, physicalDeviceCount);
@@ -223,11 +225,13 @@ int main() {
 	int windowWidth = 0, windowHeight = 0;
 	glfwGetWindowSize(window, &windowWidth, &windowHeight);
 
-	auto swapchain = createSwapchain(device, physicalDevice, surface, familyIndex, windowWidth, windowHeight);
+	VkSwapchainKHR swapchain = createSwapchain(device, physicalDevice, surface, familyIndex, windowWidth, windowHeight);
 
 	VkSemaphore aquireSemaphore = createSemaphore(device);
+	assert(aquireSemaphore);
 
 	VkSemaphore releaseSemaphore = createSemaphore(device);
+	assert(releaseSemaphore);
 
 	VkQueue queue = 0;
 	vkGetDeviceQueue(device, familyIndex, 0, &queue);
@@ -237,6 +241,7 @@ int main() {
 	VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages));
 
 	VkCommandPool commandPool = createCommandPool(device, familyIndex);
+	assert(commandPool);
 
 	VkCommandBufferAllocateInfo commandBufferInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 	commandBufferInfo.commandPool = commandPool;
@@ -254,18 +259,18 @@ int main() {
 
 		VK_CHECK(vkResetCommandPool(device, commandPool, 0));
 
-		VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+		VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };////
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 		VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
-		VkClearColorValue color = { 1,0,1,1 };
-		VkImageSubresourceRange range;
+		VkClearColorValue color = { 1, 0, 1, 1 };
+		VkImageSubresourceRange range = {};
 		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		range.levelCount = 1;
 		range.layerCount = 1;
 
-		vkCmdClearColorImage(commandBuffer, swapchainImages[0], VK_IMAGE_LAYOUT_GENERAL, &color, 1, &range);
+		vkCmdClearColorImage(commandBuffer, swapchainImages[imageIndex], VK_IMAGE_LAYOUT_GENERAL, &color, 1, &range);
 
 		VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
@@ -289,7 +294,7 @@ int main() {
 		presentInfo.pSwapchains = &swapchain;
 		presentInfo.pImageIndices = &imageIndex;
 
-		vkQueuePresentKHR(queue, &presentInfo);
+		VK_CHECK(vkQueuePresentKHR(queue, &presentInfo));
 
 		VK_CHECK(vkDeviceWaitIdle(device));
 	}
@@ -297,6 +302,7 @@ int main() {
 	glfwDestroyWindow(window);
 	vkDestroyCommandPool(device, commandPool, NULL);
 
+	vkDestroySemaphore(device, releaseSemaphore, NULL);
 	vkDestroySemaphore(device, aquireSemaphore, NULL);
 
 	vkDestroySwapchainKHR(device, swapchain, NULL);
