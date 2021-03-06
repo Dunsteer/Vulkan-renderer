@@ -65,34 +65,57 @@ uint32_t getGraphicsQueueFamily(VkPhysicalDevice physicalDevice)
 		}
 	}
 
-	return -1;
+	return VK_QUEUE_FAMILY_IGNORED;
+}
+
+bool supportsPresentation(VkPhysicalDevice physicalDevice, uint32_t familyIndex)
+{
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+	return vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice, familyIndex);
+#else
+	return true;
+#endif
 }
 
 VkPhysicalDevice pickPhysicalDevice(VkPhysicalDevice* physicalDevices, uint32_t physicalDeviceCount)
 {
+	VkPhysicalDevice discrete = 0;
+	VkPhysicalDevice fallback = 0;
+
 	for (uint32_t i = 0; i < physicalDeviceCount; ++i)
 	{
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(physicalDevices[i], &props);
 
-		if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-		{
-			printf("Picking discrete GPU: %s\n", props.deviceName);
-			return physicalDevices[i];
-		}
+		printf("GPU[%d]: %s\n", i, props.deviceName);
+
+		uint32_t familyIndex = getGraphicsQueueFamily(physicalDevices[i]);
+
+		if (familyIndex == VK_QUEUE_FAMILY_IGNORED)
+			continue;
+
+		if (!supportsPresentation(physicalDevices[i], familyIndex))
+			continue;
+
+		if (!discrete && props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			discrete = physicalDevices[i];
+
+
+		if (!fallback) fallback = physicalDevices[i];
 	}
 
-	if (physicalDeviceCount > 0)
-	{
+	if (!fallback)
+		printf("No GPU available!");
+	else {
+		VkPhysicalDevice result = discrete ? discrete : fallback;
+
 		VkPhysicalDeviceProperties props;
-		vkGetPhysicalDeviceProperties(physicalDevices[0], &props);
+		vkGetPhysicalDeviceProperties(result, &props);
 
-		printf("Picking fallback GPU: %s\n", props.deviceName);
-		return physicalDevices[0];
+		printf("Picking GPU: %s\n", props.deviceName);
 	}
 
-	printf("No physical devices available!");
-	return 0;
+	return discrete ? discrete : fallback;
 }
 
 VkDevice createDevice(float queueProperties[], const VkPhysicalDevice& physicalDevice, uint32_t familyIndex)
@@ -452,6 +475,7 @@ int main() {
 
 	uint32_t familyIndex = getGraphicsQueueFamily(physicalDevice);
 
+	assert(familyIndex != VK_QUEUE_FAMILY_IGNORED);
 
 	VkDevice device = createDevice(queueProperties, physicalDevice, familyIndex);
 
@@ -620,11 +644,11 @@ int main() {
 
 	for (int i = 0; i < swapchainImageCount; i++)
 	{
-		vkDestroyFramebuffer(device,swapchainFramebuffer[i],VK_NULL_HANDLE);
+		vkDestroyFramebuffer(device, swapchainFramebuffer[i], VK_NULL_HANDLE);
 	}
 
 	for (int i = 0; i < swapchainImageCount; i++)
-	{		
+	{
 		vkDestroyImageView(device, swapchainImageViews[i], VK_NULL_HANDLE);
 	}
 
